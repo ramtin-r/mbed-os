@@ -18,6 +18,7 @@
 #define LWIP_STACK_H
 
 #include "nsapi.h"
+#include "emac_api.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,7 +26,7 @@ extern "C" {
 
 
 // Access to lwip through the nsapi
-int lwip_bringup(void);
+int lwip_bringup(emac_interface_t *emac);
 void lwip_bringdown(void);
 
 extern nsapi_stack_t lwip_stack;

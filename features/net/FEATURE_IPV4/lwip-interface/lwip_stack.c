@@ -30,6 +30,7 @@
 #include "lwip/tcp.h"
 #include "lwip/ip.h"
 
+#include "emac_api.h"
 
 /* Static arena of sockets */
 static struct lwip_socket {
@@ -142,7 +143,7 @@ const char *lwip_get_ip_address(void)
     return lwip_ip_addr[0] ? lwip_ip_addr : 0;
 }
 
-int lwip_bringup(void)
+int lwip_bringup(emac_interface_t *emac)
 {
     // Check if we've already connected
     if (!lwip_get_mac_address()) {
@@ -157,7 +158,11 @@ int lwip_bringup(void)
         sys_arch_sem_wait(&lwip_tcpip_inited, 0);
 
         memset(&lwip_netif, 0, sizeof lwip_netif);
+#if DEVICE_EMAC
+        netif_add(&lwip_netif, 0, 0, 0, emac, emac_lwip_if_init, tcpip_input);
+#else /* DEVICE_EMAC */
         netif_add(&lwip_netif, 0, 0, 0, NULL, eth_arch_enetif_init, tcpip_input);
+#endif /* DEVICE_EMAC */
         netif_set_default(&lwip_netif);
 
         netif_set_link_callback  (&lwip_netif, lwip_netif_link_irq);
@@ -278,6 +283,11 @@ static int lwip_socket_bind(nsapi_stack_t *stack, nsapi_socket_t handle, nsapi_a
         return NSAPI_ERROR_PARAMETER;
     }
 
+    if ((s->conn->type == NETCONN_TCP && s->conn->pcb.tcp->local_port != 0) ||
+        (s->conn->type == NETCONN_UDP && s->conn->pcb.udp->local_port != 0)) {
+        return NSAPI_ERROR_PARAMETER;
+    }
+
     err_t err = netconn_bind(s->conn, (ip_addr_t *)addr.bytes, port);
     return lwip_err_remap(err);
 }
@@ -308,6 +318,9 @@ static int lwip_socket_accept(nsapi_stack_t *stack, nsapi_socket_t server, nsapi
 {
     struct lwip_socket *s = (struct lwip_socket *)server;
     struct lwip_socket *ns = lwip_arena_alloc();
+    if (!ns) {
+        return NSAPI_ERROR_NO_SOCKET;
+    }
 
     err_t err = netconn_accept(s->conn, &ns->conn);
     if (err != ERR_OK) {
